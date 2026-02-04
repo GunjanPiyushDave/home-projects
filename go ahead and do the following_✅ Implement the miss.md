@@ -2477,6 +2477,360 @@ To run all tests:
 # All tests with coverage
 ./gradlew test jacocoTestReport
 ```
+```java
+
+package com.trading.streaming.config;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.util.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class ComponentFactoryTest {
+    
+    private ComponentFactory factory;
+    
+    @BeforeEach
+    void setUp() {
+        factory = new ComponentFactory();
+    }
+    
+    @Test
+    @DisplayName("Should create simple component without dependencies")
+    void testCreateSimpleComponent() {
+        ComponentConfig config = new ComponentConfig();
+        config.setId("testComponent");
+        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$SimpleTestComponent");
+        
+        Object component = factory.createComponent(config);
+        
+        assertNotNull(component);
+        assertTrue(component instanceof SimpleTestComponent);
+        
+        // Verify component is registered with correct ID
+        assertTrue(factory.hasComponent("testComponent"));
+        assertSame(component, factory.getComponent("testComponent"));
+        
+        // Verify class name
+        assertEquals("SimpleTestComponent", component.getClass().getSimpleName());
+    }
+    
+    @Test
+    @DisplayName("Should create component with constructor arguments")
+    void testCreateComponentWithConstructorArgs() {
+        ComponentConfig config = new ComponentConfig();
+        config.setId("configComponent");
+        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithConstructor");
+        config.setConstructorArgs(Arrays.asList("test-value", 42));
+        
+        Object component = factory.createComponent(config);
+        
+        assertNotNull(component);
+        assertTrue(component instanceof ComponentWithConstructor);
+        
+        ComponentWithConstructor typed = (ComponentWithConstructor) component;
+        assertEquals("test-value", typed.getName());
+        assertEquals(42, typed.getValue());
+    }
+    
+    @Test
+    @DisplayName("Should create component with string constructor arguments converted to primitives")
+    void testCreateComponentWithStringConstructorArgs() {
+        ComponentConfig config = new ComponentConfig();
+        config.setId("configComponent");
+        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithConstructor");
+        // String arguments should be converted to proper types
+        config.setConstructorArgs(Arrays.asList("test-value", "42"));
+        
+        Object component = factory.createComponent(config);
+        
+        assertNotNull(component);
+        ComponentWithConstructor typed = (ComponentWithConstructor) component;
+        assertEquals("test-value", typed.getName());
+        assertEquals(42, typed.getValue());
+    }
+    
+    @Test
+    @DisplayName("Should set properties via setters")
+    void testSetProperties() {
+        ComponentConfig config = new ComponentConfig();
+        config.setId("propComponent");
+        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithProperties");
+        
+        PropertyConfig prop1 = new PropertyConfig();
+        prop1.setName("name");
+        prop1.setValue("test-name");
+        
+        PropertyConfig prop2 = new PropertyConfig();
+        prop2.setName("count");
+        prop2.setValue(100);
+        
+        config.setProperties(Arrays.asList(prop1, prop2));
+        
+        Object component = factory.createComponent(config);
+        
+        assertNotNull(component);
+        ComponentWithProperties typed = (ComponentWithProperties) component;
+        assertEquals("test-name", typed.getName());
+        assertEquals(100, typed.getCount());
+    }
+    
+    @Test
+    @DisplayName("Should set properties with string values converted to primitives")
+    void testSetPropertiesWithStringValues() {
+        ComponentConfig config = new ComponentConfig();
+        config.setId("propComponent");
+        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithProperties");
+        
+        PropertyConfig prop1 = new PropertyConfig();
+        prop1.setName("name");
+        prop1.setValue("test-name");
+        
+        PropertyConfig prop2 = new PropertyConfig();
+        prop2.setName("count");
+        prop2.setValue("100"); // String should be converted to int
+        
+        config.setProperties(Arrays.asList(prop1, prop2));
+        
+        Object component = factory.createComponent(config);
+        
+        ComponentWithProperties typed = (ComponentWithProperties) component;
+        assertEquals("test-name", typed.getName());
+        assertEquals(100, typed.getCount());
+    }
+    
+    @Test
+    @DisplayName("Should handle component references")
+    void testComponentReferences() {
+        // Create first component
+        ComponentConfig config1 = new ComponentConfig();
+        config1.setId("component1");
+        config1.setClassName("com.trading.streaming.config.ComponentFactoryTest$SimpleTestComponent");
+        factory.createComponent(config1);
+        
+        // Create second component that references first
+        ComponentConfig config2 = new ComponentConfig();
+        config2.setId("component2");
+        config2.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithDependency");
+        
+        Map<String, Object> refMap = new HashMap<>();
+        refMap.put("ref", "component1");
+        config2.setConstructorArgs(Arrays.asList(refMap));
+        
+        Object component = factory.createComponent(config2);
+        
+        assertNotNull(component);
+        ComponentWithDependency typed = (ComponentWithDependency) component;
+        assertNotNull(typed.getDependency());
+        assertTrue(typed.getDependency() instanceof SimpleTestComponent);
+    }
+    
+    @Test
+    @DisplayName("Should invoke config methods")
+    void testConfigMethods() {
+        ComponentConfig config = new ComponentConfig();
+        config.setId("methodComponent");
+        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithMethods");
+        
+        ConfigMethodConfig method1 = new ConfigMethodConfig();
+        method1.setName("configure");
+        method1.setArgs(Arrays.asList("config-value"));
+        
+        ConfigMethodConfig method2 = new ConfigMethodConfig();
+        method2.setName("setMultiplier");
+        method2.setArgs(Arrays.asList(5));
+        
+        config.setConfigMethods(Arrays.asList(method1, method2));
+        
+        Object component = factory.createComponent(config);
+        
+        assertNotNull(component);
+        ComponentWithMethods typed = (ComponentWithMethods) component;
+        assertEquals("config-value", typed.getConfigValue());
+        assertEquals(5, typed.getMultiplier());
+    }
+    
+    @Test
+    @DisplayName("Should invoke config methods with string arguments converted to primitives")
+    void testConfigMethodsWithStringArgs() {
+        ComponentConfig config = new ComponentConfig();
+        config.setId("methodComponent");
+        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithMethods");
+        
+        ConfigMethodConfig method1 = new ConfigMethodConfig();
+        method1.setName("configure");
+        method1.setArgs(Arrays.asList("config-value"));
+        
+        ConfigMethodConfig method2 = new ConfigMethodConfig();
+        method2.setName("setMultiplier");
+        method2.setArgs(Arrays.asList("5")); // String should be converted to int
+        
+        config.setConfigMethods(Arrays.asList(method1, method2));
+        
+        Object component = factory.createComponent(config);
+        
+        ComponentWithMethods typed = (ComponentWithMethods) component;
+        assertEquals("config-value", typed.getConfigValue());
+        assertEquals(5, typed.getMultiplier());
+    }
+    
+    @Test
+    @DisplayName("Should handle property references")
+    void testPropertyReferences() {
+        // Create dependency
+        ComponentConfig depConfig = new ComponentConfig();
+        depConfig.setId("dependency");
+        depConfig.setClassName("com.trading.streaming.config.ComponentFactoryTest$SimpleTestComponent");
+        factory.createComponent(depConfig);
+        
+        // Create component with property reference
+        ComponentConfig config = new ComponentConfig();
+        config.setId("mainComponent");
+        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithProperties");
+        
+        PropertyConfig prop = new PropertyConfig();
+        prop.setName("dependency");
+        prop.setReference("dependency");
+        
+        config.setProperties(Arrays.asList(prop));
+        
+        Object component = factory.createComponent(config);
+        
+        assertNotNull(component);
+        ComponentWithProperties typed = (ComponentWithProperties) component;
+        assertNotNull(typed.getDependency());
+        assertTrue(typed.getDependency() instanceof SimpleTestComponent);
+    }
+    
+    @Test
+    @DisplayName("Should throw exception for missing component reference")
+    void testMissingComponentReference() {
+        ComponentConfig config = new ComponentConfig();
+        config.setId("component");
+        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithDependency");
+        
+        Map<String, Object> refMap = new HashMap<>();
+        refMap.put("ref", "non-existent");
+        config.setConstructorArgs(Arrays.asList(refMap));
+        
+        assertThrows(RuntimeException.class, () -> {
+            factory.createComponent(config);
+        });
+    }
+    
+    @Test
+    @DisplayName("Should create multiple components in order")
+    void testMultipleComponentCreation() {
+        List<ComponentConfig> configs = new ArrayList<>();
+        
+        ComponentConfig config1 = new ComponentConfig();
+        config1.setId("comp1");
+        config1.setClassName("com.trading.streaming.config.ComponentFactoryTest$SimpleTestComponent");
+        configs.add(config1);
+        
+        ComponentConfig config2 = new ComponentConfig();
+        config2.setId("comp2");
+        config2.setClassName("com.trading.streaming.config.ComponentFactoryTest$SimpleTestComponent");
+        configs.add(config2);
+        
+        factory.createComponents(configs);
+        
+        assertTrue(factory.hasComponent("comp1"));
+        assertTrue(factory.hasComponent("comp2"));
+        assertNotSame(factory.getComponent("comp1"), factory.getComponent("comp2"));
+    }
+    
+    @Test
+    @DisplayName("Should handle boolean string conversion")
+    void testBooleanConversion() {
+        ComponentConfig config = new ComponentConfig();
+        config.setId("boolComponent");
+        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithBoolean");
+        
+        PropertyConfig prop = new PropertyConfig();
+        prop.setName("enabled");
+        prop.setValue("true"); // String should be converted to boolean
+        
+        config.setProperties(Arrays.asList(prop));
+        
+        Object component = factory.createComponent(config);
+        
+        ComponentWithBoolean typed = (ComponentWithBoolean) component;
+        assertTrue(typed.isEnabled());
+    }
+    
+    // Test component classes
+    public static class SimpleTestComponent {
+        public SimpleTestComponent() {}
+    }
+    
+    public static class ComponentWithConstructor {
+        private final String name;
+        private final int value;
+        
+        public ComponentWithConstructor(String name, int value) {
+            this.name = name;
+            this.value = value;
+        }
+        
+        public String getName() { return name; }
+        public int getValue() { return value; }
+    }
+    
+    public static class ComponentWithProperties {
+        private String name;
+        private int count;
+        private Object dependency;
+        
+        public void setName(String name) { this.name = name; }
+        public void setCount(int count) { this.count = count; }
+        public void setDependency(Object dependency) { this.dependency = dependency; }
+        
+        public String getName() { return name; }
+        public int getCount() { return count; }
+        public Object getDependency() { return dependency; }
+    }
+    
+    public static class ComponentWithDependency {
+        private final Object dependency;
+        
+        public ComponentWithDependency(Object dependency) {
+            this.dependency = dependency;
+        }
+        
+        public Object getDependency() { return dependency; }
+    }
+    
+    public static class ComponentWithMethods {
+        private String configValue;
+        private int multiplier;
+        
+        public void configure(String value) {
+            this.configValue = value;
+        }
+        
+        public void setMultiplier(int multiplier) {
+            this.multiplier = multiplier;
+        }
+        
+        public String getConfigValue() { return configValue; }
+        public int getMultiplier() { return multiplier; }
+    }
+    
+    public static class ComponentWithBoolean {
+        private boolean enabled;
+        
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+        
+        public boolean isEnabled() { return enabled; }
+    }
+}
+```
 
 <span style="display:none">[^1]</span>
 
