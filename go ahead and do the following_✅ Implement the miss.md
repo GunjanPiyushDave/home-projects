@@ -2482,70 +2482,169 @@ To run all tests:
 package com.trading.streaming.impl;
 
 import com.trading.streaming.api.Fields;
-import com.trading.streaming.api.OutputFieldsDeclarer;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Implementation of OutputFieldsDeclarer that stores stream field declarations.
- */
-public class OutputFieldsDeclarerImpl implements OutputFieldsDeclarer {
+class OutputFieldsDeclarerImplTest {
     
-    private final Map<String, Fields> streams = new ConcurrentHashMap<>();
-    private final Map<String, Boolean> directStreams = new ConcurrentHashMap<>();
+    private OutputFieldsDeclarerImpl declarer;
     
-    @Override
-    public void declare(Fields fields) {
-        declareStream("default", false, fields);
+    @BeforeEach
+    void setUp() {
+        declarer = new OutputFieldsDeclarerImpl();
     }
     
-    @Override
-    public void declareStream(String streamId, Fields fields) {
-        declareStream(streamId, false, fields);
-    }
-    
-    @Override
-    public void declareStream(String streamId, boolean direct, Fields fields) {
-        streams.put(streamId, fields);
-        directStreams.put(streamId, direct);
-    }
-    
-    /**
-     * Get fields for a specific stream.
-     * Falls back to "default" stream if the requested stream doesn't exist.
-     * Returns null if neither the requested stream nor default exists.
-     */
-    public Fields getFieldsFor(String streamId) {
-        // Handle null as default
-        if (streamId == null) {
-            streamId = "default";
-        }
+    @Test
+    @DisplayName("Should declare default stream")
+    void testDeclareDefaultStream() {
+        Fields fields = new Fields("field1", "field2");
+        declarer.declare(fields);
         
-        // Try to get specific stream
-        Fields fields = streams.get(streamId);
-        
-        // If not found and not asking for default, try fallback to default
-        if (fields == null && !"default".equals(streamId)) {
-            fields = streams.get("default");
-        }
-        
-        return fields;
+        Fields retrievedFields = declarer.getFieldsFor("default");
+        assertNotNull(retrievedFields);
+        assertEquals(2, retrievedFields.size());
+        assertEquals("field1", retrievedFields.get(0));
+        assertEquals("field2", retrievedFields.get(1));
     }
     
-    /**
-     * Check if a stream is declared as direct.
-     */
-    public boolean isDirect(String streamId) {
-        return directStreams.getOrDefault(streamId, false);
+    @Test
+    @DisplayName("Should declare named stream")
+    void testDeclareNamedStream() {
+        Fields fields1 = new Fields("value");
+        Fields fields2 = new Fields("error");
+        
+        declarer.declareStream("stream1", fields1);
+        declarer.declareStream("stream2", fields2);
+        
+        Fields retrieved1 = declarer.getFieldsFor("stream1");
+        Fields retrieved2 = declarer.getFieldsFor("stream2");
+        
+        assertNotNull(retrieved1);
+        assertNotNull(retrieved2);
+        assertEquals("value", retrieved1.get(0));
+        assertEquals("error", retrieved2.get(0));
     }
     
-    /**
-     * Get all declared streams.
-     */
-    public Map<String, Fields> getAllStreams() {
-        return new HashMap<>(streams);
+    @Test
+    @DisplayName("Should declare direct stream")
+    void testDeclareDirectStream() {
+        Fields fields = new Fields("data");
+        declarer.declareStream("direct-stream", true, fields);
+        
+        assertTrue(declarer.isDirect("direct-stream"));
+        assertFalse(declarer.isDirect("non-existent"));
+    }
+    
+    @Test
+    @DisplayName("Should handle multiple stream declarations")
+    void testMultipleStreams() {
+        declarer.declare(new Fields("default"));
+        declarer.declareStream("stream1", new Fields("s1"));
+        declarer.declareStream("stream2", new Fields("s2"));
+        declarer.declareStream("stream3", new Fields("s3"));
+        
+        var allStreams = declarer.getAllStreams();
+        
+        assertEquals(4, allStreams.size());
+        assertTrue(allStreams.containsKey("default"));
+        assertTrue(allStreams.containsKey("stream1"));
+        assertTrue(allStreams.containsKey("stream2"));
+        assertTrue(allStreams.containsKey("stream3"));
+    }
+    
+    @Test
+    @DisplayName("Should return null for non-existent stream when no default exists")
+    void testNonExistentStreamWithoutDefault() {
+        // Don't declare any default stream
+        declarer.declareStream("stream1", new Fields("field1"));
+        
+        // Non-existent stream should return null
+        assertNull(declarer.getFieldsFor("non-existent"));
+    }
+    
+    @Test
+    @DisplayName("Should fallback to default stream for non-existent stream")
+    void testFallbackToDefault() {
+        Fields defaultFields = new Fields("default_field");
+        declarer.declare(defaultFields);
+        
+        // When requesting non-existent stream, should fallback to default
+        Fields retrieved = declarer.getFieldsFor("some-stream");
+        
+        assertNotNull(retrieved);
+        assertEquals(defaultFields, retrieved);
+        assertEquals("default_field", retrieved.get(0));
+    }
+    
+    @Test
+    @DisplayName("Should return specific stream when it exists even if default exists")
+    void testSpecificStreamTakesPrecedence() {
+        declarer.declare(new Fields("default_field"));
+        declarer.declareStream("custom", new Fields("custom_field"));
+        
+        Fields customFields = declarer.getFieldsFor("custom");
+        
+        assertNotNull(customFields);
+        assertEquals("custom_field", customFields.get(0));
+        assertNotEquals("default_field", customFields.get(0));
+    }
+    
+    @Test
+    @DisplayName("Should handle null stream ID as default")
+    void testNullStreamIdReturnsDefault() {
+        Fields defaultFields = new Fields("default_field");
+        declarer.declare(defaultFields);
+        
+        Fields retrieved = declarer.getFieldsFor(null);
+        
+        assertNotNull(retrieved);
+        assertEquals(defaultFields, retrieved);
+    }
+    
+    @Test
+    @DisplayName("Should return null for null stream ID when no default exists")
+    void testNullStreamIdWithoutDefault() {
+        declarer.declareStream("custom", new Fields("custom_field"));
+        
+        assertNull(declarer.getFieldsFor(null));
+    }
+    
+    @Test
+    @DisplayName("Should handle empty stream name")
+    void testEmptyStreamName() {
+        declarer.declare(new Fields("default_field"));
+        declarer.declareStream("", new Fields("empty_name_field"));
+        
+        Fields retrieved = declarer.getFieldsFor("");
+        
+        assertNotNull(retrieved);
+        assertEquals("empty_name_field", retrieved.get(0));
+    }
+    
+    @Test
+    @DisplayName("Should return false for isDirect on non-direct streams")
+    void testIsDirectOnNonDirectStreams() {
+        declarer.declare(new Fields("default"));
+        declarer.declareStream("stream1", new Fields("field1"));
+        
+        assertFalse(declarer.isDirect("default"));
+        assertFalse(declarer.isDirect("stream1"));
+    }
+    
+    @Test
+    @DisplayName("Should handle overwriting stream declaration")
+    void testOverwriteStreamDeclaration() {
+        declarer.declareStream("stream1", new Fields("field1"));
+        declarer.declareStream("stream1", new Fields("field2")); // Overwrite
+        
+        Fields retrieved = declarer.getFieldsFor("stream1");
+        
+        assertNotNull(retrieved);
+        assertEquals(1, retrieved.size());
+        assertEquals("field2", retrieved.get(0));
     }
 }
 
