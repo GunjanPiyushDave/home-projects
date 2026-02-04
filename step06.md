@@ -557,3 +557,192 @@ This implementation provides:
 
 [^1]: Master-Implementation-Prompt_-Apache-Storm-Compati.md
 
+package com.trading.streaming.config;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Enhanced factory with automatic type conversion.
+ */
+public class ComponentFactory {
+    private static final Logger logger = LoggerFactory.getLogger(ComponentFactory.class);
+    
+    private final Map<String, Object> components = new LinkedHashMap<>();
+    
+    // ... existing methods ...
+    
+    /**
+     * Set a property via setter method with automatic type conversion.
+     */
+    private void setProperty(Object instance, PropertyConfig property) throws Exception {
+        Object value = property.getReference() != null ? 
+            getComponent(property.getReference()) : property.getValue();
+        
+        if (value == null) {
+            throw new IllegalArgumentException("Property value is null: " + property.getName());
+        }
+        
+        String propertyName = property.getName();
+        String setterName = "set" + capitalize(propertyName);
+        
+        // Find the setter method
+        Method setter = findSetterMethod(instance.getClass(), setterName);
+        
+        if (setter == null) {
+            throw new NoSuchMethodException(
+                "No setter found for property: " + propertyName + " in class " + instance.getClass().getName());
+        }
+        
+        // Convert value to the parameter type expected by setter
+        Class<?> parameterType = setter.getParameterTypes()[0];
+        Object convertedValue = convertValue(value, parameterType);
+        
+        // Invoke setter
+        setter.invoke(instance, convertedValue);
+        
+        logger.debug("Set property '{}' = {} (type: {}) on {}", 
+                    propertyName, convertedValue, parameterType.getSimpleName(), 
+                    instance.getClass().getSimpleName());
+    }
+    
+    /**
+     * Find setter method by name, checking parameter types.
+     */
+    private Method findSetterMethod(Class<?> clazz, String methodName) {
+        for (Method method : clazz.getMethods()) {
+            if (method.getName().equals(methodName) && 
+                method.getParameterCount() == 1) {
+                return method;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Convert a value to the target type.
+     */
+    private Object convertValue(Object value, Class<?> targetType) {
+        if (value == null) {
+            return null;
+        }
+        
+        // If already correct type, return as-is
+        if (targetType.isAssignableFrom(value.getClass())) {
+            return value;
+        }
+        
+        // Convert from String
+        if (value instanceof String) {
+            return convertFromString((String) value, targetType);
+        }
+        
+        // Handle Number conversions
+        if (value instanceof Number) {
+            return convertNumber((Number) value, targetType);
+        }
+        
+        // Default: return as-is and let Java handle it
+        return value;
+    }
+    
+    /**
+     * Convert string to target type.
+     */
+    private Object convertFromString(String value, Class<?> targetType) {
+        try {
+            // Primitives and their wrappers
+            if (targetType == int.class || targetType == Integer.class) {
+                return Integer.parseInt(value);
+            }
+            if (targetType == long.class || targetType == Long.class) {
+                return Long.parseLong(value);
+            }
+            if (targetType == double.class || targetType == Double.class) {
+                return Double.parseDouble(value);
+            }
+            if (targetType == float.class || targetType == Float.class) {
+                return Float.parseFloat(value);
+            }
+            if (targetType == boolean.class || targetType == Boolean.class) {
+                return Boolean.parseBoolean(value);
+            }
+            if (targetType == short.class || targetType == Short.class) {
+                return Short.parseShort(value);
+            }
+            if (targetType == byte.class || targetType == Byte.class) {
+                return Byte.parseByte(value);
+            }
+            if (targetType == char.class || targetType == Character.class) {
+                if (value.length() == 1) {
+                    return value.charAt(0);
+                }
+                throw new IllegalArgumentException("Cannot convert string to char: " + value);
+            }
+            
+            // String type
+            if (targetType == String.class) {
+                return value;
+            }
+            
+            // Enum types
+            if (targetType.isEnum()) {
+                @SuppressWarnings({"unchecked", "rawtypes"})
+                Object enumValue = Enum.valueOf((Class<? extends Enum>) targetType, value);
+                return enumValue;
+            }
+            
+            // Default: return string
+            return value;
+            
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(
+                "Cannot convert '" + value + "' to " + targetType.getSimpleName(), e);
+        }
+    }
+    
+    /**
+     * Convert Number to target type.
+     */
+    private Object convertNumber(Number value, Class<?> targetType) {
+        if (targetType == int.class || targetType == Integer.class) {
+            return value.intValue();
+        }
+        if (targetType == long.class || targetType == Long.class) {
+            return value.longValue();
+        }
+        if (targetType == double.class || targetType == Double.class) {
+            return value.doubleValue();
+        }
+        if (targetType == float.class || targetType == Float.class) {
+            return value.floatValue();
+        }
+        if (targetType == short.class || targetType == Short.class) {
+            return value.shortValue();
+        }
+        if (targetType == byte.class || targetType == Byte.class) {
+            return value.byteValue();
+        }
+        
+        return value;
+    }
+    
+    /**
+     * Capitalize first letter of a string.
+     */
+    private String capitalize(String str) {
+        if (str == null || str.isEmpty()) {
+            return str;
+        }
+        return str.substring(0, 1).toUpperCase() + str.substring(1);
+    }
+    
+    // ... rest of existing methods ...
+}
