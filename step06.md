@@ -557,6 +557,7 @@ This implementation provides:
 
 [^1]: Master-Implementation-Prompt_-Apache-Storm-Compati.md
 
+```java
 package com.trading.streaming.config;
 
 import org.slf4j.Logger;
@@ -746,3 +747,4 @@ public class ComponentFactory {
     
     // ... rest of existing methods ...
 }
+```
