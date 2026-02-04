@@ -2479,357 +2479,244 @@ To run all tests:
 ```
 ```java
 
-package com.trading.streaming.config;
+package com.trading.streaming.impl;
 
+import com.trading.streaming.api.Fields;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.*;
-
 import static org.junit.jupiter.api.Assertions.*;
 
-class ComponentFactoryTest {
+class OutputFieldsDeclarerImplTest {
     
-    private ComponentFactory factory;
+    private OutputFieldsDeclarerImpl declarer;
     
     @BeforeEach
     void setUp() {
-        factory = new ComponentFactory();
+        declarer = new OutputFieldsDeclarerImpl();
     }
     
     @Test
-    @DisplayName("Should create simple component without dependencies")
-    void testCreateSimpleComponent() {
-        ComponentConfig config = new ComponentConfig();
-        config.setId("testComponent");
-        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$SimpleTestComponent");
+    @DisplayName("Should declare default stream")
+    void testDeclareDefaultStream() {
+        Fields fields = new Fields("field1", "field2");
+        declarer.declare(fields);
         
-        Object component = factory.createComponent(config);
-        
-        assertNotNull(component);
-        assertTrue(component instanceof SimpleTestComponent);
-        
-        // Verify component is registered with correct ID
-        assertTrue(factory.hasComponent("testComponent"));
-        assertSame(component, factory.getComponent("testComponent"));
-        
-        // Verify class name
-        assertEquals("SimpleTestComponent", component.getClass().getSimpleName());
+        Fields retrievedFields = declarer.getFieldsFor("default");
+        assertNotNull(retrievedFields);
+        assertEquals(2, retrievedFields.size());
+        assertEquals("field1", retrievedFields.get(0));
+        assertEquals("field2", retrievedFields.get(1));
     }
     
     @Test
-    @DisplayName("Should create component with constructor arguments")
-    void testCreateComponentWithConstructorArgs() {
-        ComponentConfig config = new ComponentConfig();
-        config.setId("configComponent");
-        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithConstructor");
-        config.setConstructorArgs(Arrays.asList("test-value", 42));
+    @DisplayName("Should declare named stream")
+    void testDeclareNamedStream() {
+        Fields fields1 = new Fields("value");
+        Fields fields2 = new Fields("error");
         
-        Object component = factory.createComponent(config);
+        declarer.declareStream("stream1", fields1);
+        declarer.declareStream("stream2", fields2);
         
-        assertNotNull(component);
-        assertTrue(component instanceof ComponentWithConstructor);
+        Fields retrieved1 = declarer.getFieldsFor("stream1");
+        Fields retrieved2 = declarer.getFieldsFor("stream2");
         
-        ComponentWithConstructor typed = (ComponentWithConstructor) component;
-        assertEquals("test-value", typed.getName());
-        assertEquals(42, typed.getValue());
+        assertNotNull(retrieved1);
+        assertNotNull(retrieved2);
+        assertEquals("value", retrieved1.get(0));
+        assertEquals("error", retrieved2.get(0));
     }
     
     @Test
-    @DisplayName("Should create component with string constructor arguments converted to primitives")
-    void testCreateComponentWithStringConstructorArgs() {
-        ComponentConfig config = new ComponentConfig();
-        config.setId("configComponent");
-        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithConstructor");
-        // String arguments should be converted to proper types
-        config.setConstructorArgs(Arrays.asList("test-value", "42"));
+    @DisplayName("Should declare direct stream")
+    void testDeclareDirectStream() {
+        Fields fields = new Fields("data");
+        declarer.declareStream("direct-stream", true, fields);
         
-        Object component = factory.createComponent(config);
-        
-        assertNotNull(component);
-        ComponentWithConstructor typed = (ComponentWithConstructor) component;
-        assertEquals("test-value", typed.getName());
-        assertEquals(42, typed.getValue());
+        assertTrue(declarer.isDirect("direct-stream"));
+        assertFalse(declarer.isDirect("non-existent"));
     }
     
     @Test
-    @DisplayName("Should set properties via setters")
-    void testSetProperties() {
-        ComponentConfig config = new ComponentConfig();
-        config.setId("propComponent");
-        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithProperties");
+    @DisplayName("Should handle multiple stream declarations")
+    void testMultipleStreams() {
+        declarer.declare(new Fields("default"));
+        declarer.declareStream("stream1", new Fields("s1"));
+        declarer.declareStream("stream2", new Fields("s2"));
+        declarer.declareStream("stream3", new Fields("s3"));
         
-        PropertyConfig prop1 = new PropertyConfig();
-        prop1.setName("name");
-        prop1.setValue("test-name");
+        var allStreams = declarer.getAllStreams();
         
-        PropertyConfig prop2 = new PropertyConfig();
-        prop2.setName("count");
-        prop2.setValue(100);
-        
-        config.setProperties(Arrays.asList(prop1, prop2));
-        
-        Object component = factory.createComponent(config);
-        
-        assertNotNull(component);
-        ComponentWithProperties typed = (ComponentWithProperties) component;
-        assertEquals("test-name", typed.getName());
-        assertEquals(100, typed.getCount());
+        assertEquals(4, allStreams.size());
+        assertTrue(allStreams.containsKey("default"));
+        assertTrue(allStreams.containsKey("stream1"));
+        assertTrue(allStreams.containsKey("stream2"));
+        assertTrue(allStreams.containsKey("stream3"));
     }
     
     @Test
-    @DisplayName("Should set properties with string values converted to primitives")
-    void testSetPropertiesWithStringValues() {
-        ComponentConfig config = new ComponentConfig();
-        config.setId("propComponent");
-        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithProperties");
+    @DisplayName("Should return null for non-existent stream when no default exists")
+    void testNonExistentStreamWithoutDefault() {
+        // Don't declare any default stream
+        declarer.declareStream("stream1", new Fields("field1"));
         
-        PropertyConfig prop1 = new PropertyConfig();
-        prop1.setName("name");
-        prop1.setValue("test-name");
-        
-        PropertyConfig prop2 = new PropertyConfig();
-        prop2.setName("count");
-        prop2.setValue("100"); // String should be converted to int
-        
-        config.setProperties(Arrays.asList(prop1, prop2));
-        
-        Object component = factory.createComponent(config);
-        
-        ComponentWithProperties typed = (ComponentWithProperties) component;
-        assertEquals("test-name", typed.getName());
-        assertEquals(100, typed.getCount());
+        // Non-existent stream should return null
+        assertNull(declarer.getFieldsFor("non-existent"));
     }
     
     @Test
-    @DisplayName("Should handle component references")
-    void testComponentReferences() {
-        // Create first component
-        ComponentConfig config1 = new ComponentConfig();
-        config1.setId("component1");
-        config1.setClassName("com.trading.streaming.config.ComponentFactoryTest$SimpleTestComponent");
-        factory.createComponent(config1);
+    @DisplayName("Should fallback to default stream for non-existent stream")
+    void testFallbackToDefault() {
+        Fields defaultFields = new Fields("default_field");
+        declarer.declare(defaultFields);
         
-        // Create second component that references first
-        ComponentConfig config2 = new ComponentConfig();
-        config2.setId("component2");
-        config2.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithDependency");
+        // When requesting non-existent stream, should fallback to default
+        Fields retrieved = declarer.getFieldsFor("some-stream");
         
-        Map<String, Object> refMap = new HashMap<>();
-        refMap.put("ref", "component1");
-        config2.setConstructorArgs(Arrays.asList(refMap));
-        
-        Object component = factory.createComponent(config2);
-        
-        assertNotNull(component);
-        ComponentWithDependency typed = (ComponentWithDependency) component;
-        assertNotNull(typed.getDependency());
-        assertTrue(typed.getDependency() instanceof SimpleTestComponent);
+        assertNotNull(retrieved);
+        assertEquals(defaultFields, retrieved);
+        assertEquals("default_field", retrieved.get(0));
     }
     
     @Test
-    @DisplayName("Should invoke config methods")
-    void testConfigMethods() {
-        ComponentConfig config = new ComponentConfig();
-        config.setId("methodComponent");
-        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithMethods");
+    @DisplayName("Should return specific stream when it exists even if default exists")
+    void testSpecificStreamTakesPrecedence() {
+        declarer.declare(new Fields("default_field"));
+        declarer.declareStream("custom", new Fields("custom_field"));
         
-        ConfigMethodConfig method1 = new ConfigMethodConfig();
-        method1.setName("configure");
-        method1.setArgs(Arrays.asList("config-value"));
+        Fields customFields = declarer.getFieldsFor("custom");
         
-        ConfigMethodConfig method2 = new ConfigMethodConfig();
-        method2.setName("setMultiplier");
-        method2.setArgs(Arrays.asList(5));
-        
-        config.setConfigMethods(Arrays.asList(method1, method2));
-        
-        Object component = factory.createComponent(config);
-        
-        assertNotNull(component);
-        ComponentWithMethods typed = (ComponentWithMethods) component;
-        assertEquals("config-value", typed.getConfigValue());
-        assertEquals(5, typed.getMultiplier());
+        assertNotNull(customFields);
+        assertEquals("custom_field", customFields.get(0));
+        assertNotEquals("default_field", customFields.get(0));
     }
     
     @Test
-    @DisplayName("Should invoke config methods with string arguments converted to primitives")
-    void testConfigMethodsWithStringArgs() {
-        ComponentConfig config = new ComponentConfig();
-        config.setId("methodComponent");
-        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithMethods");
+    @DisplayName("Should handle null stream ID as default")
+    void testNullStreamIdReturnsDefault() {
+        Fields defaultFields = new Fields("default_field");
+        declarer.declare(defaultFields);
         
-        ConfigMethodConfig method1 = new ConfigMethodConfig();
-        method1.setName("configure");
-        method1.setArgs(Arrays.asList("config-value"));
+        Fields retrieved = declarer.getFieldsFor(null);
         
-        ConfigMethodConfig method2 = new ConfigMethodConfig();
-        method2.setName("setMultiplier");
-        method2.setArgs(Arrays.asList("5")); // String should be converted to int
-        
-        config.setConfigMethods(Arrays.asList(method1, method2));
-        
-        Object component = factory.createComponent(config);
-        
-        ComponentWithMethods typed = (ComponentWithMethods) component;
-        assertEquals("config-value", typed.getConfigValue());
-        assertEquals(5, typed.getMultiplier());
+        assertNotNull(retrieved);
+        assertEquals(defaultFields, retrieved);
     }
     
     @Test
-    @DisplayName("Should handle property references")
-    void testPropertyReferences() {
-        // Create dependency
-        ComponentConfig depConfig = new ComponentConfig();
-        depConfig.setId("dependency");
-        depConfig.setClassName("com.trading.streaming.config.ComponentFactoryTest$SimpleTestComponent");
-        factory.createComponent(depConfig);
+    @DisplayName("Should return null for null stream ID when no default exists")
+    void testNullStreamIdWithoutDefault() {
+        declarer.declareStream("custom", new Fields("custom_field"));
         
-        // Create component with property reference
-        ComponentConfig config = new ComponentConfig();
-        config.setId("mainComponent");
-        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithProperties");
-        
-        PropertyConfig prop = new PropertyConfig();
-        prop.setName("dependency");
-        prop.setReference("dependency");
-        
-        config.setProperties(Arrays.asList(prop));
-        
-        Object component = factory.createComponent(config);
-        
-        assertNotNull(component);
-        ComponentWithProperties typed = (ComponentWithProperties) component;
-        assertNotNull(typed.getDependency());
-        assertTrue(typed.getDependency() instanceof SimpleTestComponent);
+        assertNull(declarer.getFieldsFor(null));
     }
     
     @Test
-    @DisplayName("Should throw exception for missing component reference")
-    void testMissingComponentReference() {
-        ComponentConfig config = new ComponentConfig();
-        config.setId("component");
-        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithDependency");
+    @DisplayName("Should handle empty stream name")
+    void testEmptyStreamName() {
+        declarer.declare(new Fields("default_field"));
+        declarer.declareStream("", new Fields("empty_name_field"));
         
-        Map<String, Object> refMap = new HashMap<>();
-        refMap.put("ref", "non-existent");
-        config.setConstructorArgs(Arrays.asList(refMap));
+        Fields retrieved = declarer.getFieldsFor("");
         
-        assertThrows(RuntimeException.class, () -> {
-            factory.createComponent(config);
-        });
+        assertNotNull(retrieved);
+        assertEquals("empty_name_field", retrieved.get(0));
     }
     
     @Test
-    @DisplayName("Should create multiple components in order")
-    void testMultipleComponentCreation() {
-        List<ComponentConfig> configs = new ArrayList<>();
+    @DisplayName("Should return false for isDirect on non-direct streams")
+    void testIsDirectOnNonDirectStreams() {
+        declarer.declare(new Fields("default"));
+        declarer.declareStream("stream1", new Fields("field1"));
         
-        ComponentConfig config1 = new ComponentConfig();
-        config1.setId("comp1");
-        config1.setClassName("com.trading.streaming.config.ComponentFactoryTest$SimpleTestComponent");
-        configs.add(config1);
-        
-        ComponentConfig config2 = new ComponentConfig();
-        config2.setId("comp2");
-        config2.setClassName("com.trading.streaming.config.ComponentFactoryTest$SimpleTestComponent");
-        configs.add(config2);
-        
-        factory.createComponents(configs);
-        
-        assertTrue(factory.hasComponent("comp1"));
-        assertTrue(factory.hasComponent("comp2"));
-        assertNotSame(factory.getComponent("comp1"), factory.getComponent("comp2"));
+        assertFalse(declarer.isDirect("default"));
+        assertFalse(declarer.isDirect("stream1"));
     }
     
     @Test
-    @DisplayName("Should handle boolean string conversion")
-    void testBooleanConversion() {
-        ComponentConfig config = new ComponentConfig();
-        config.setId("boolComponent");
-        config.setClassName("com.trading.streaming.config.ComponentFactoryTest$ComponentWithBoolean");
+    @DisplayName("Should handle overwriting stream declaration")
+    void testOverwriteStreamDeclaration() {
+        declarer.declareStream("stream1", new Fields("field1"));
+        declarer.declareStream("stream1", new Fields("field2")); // Overwrite
         
-        PropertyConfig prop = new PropertyConfig();
-        prop.setName("enabled");
-        prop.setValue("true"); // String should be converted to boolean
+        Fields retrieved = declarer.getFieldsFor("stream1");
         
-        config.setProperties(Arrays.asList(prop));
-        
-        Object component = factory.createComponent(config);
-        
-        ComponentWithBoolean typed = (ComponentWithBoolean) component;
-        assertTrue(typed.isEnabled());
-    }
-    
-    // Test component classes
-    public static class SimpleTestComponent {
-        public SimpleTestComponent() {}
-    }
-    
-    public static class ComponentWithConstructor {
-        private final String name;
-        private final int value;
-        
-        public ComponentWithConstructor(String name, int value) {
-            this.name = name;
-            this.value = value;
-        }
-        
-        public String getName() { return name; }
-        public int getValue() { return value; }
-    }
-    
-    public static class ComponentWithProperties {
-        private String name;
-        private int count;
-        private Object dependency;
-        
-        public void setName(String name) { this.name = name; }
-        public void setCount(int count) { this.count = count; }
-        public void setDependency(Object dependency) { this.dependency = dependency; }
-        
-        public String getName() { return name; }
-        public int getCount() { return count; }
-        public Object getDependency() { return dependency; }
-    }
-    
-    public static class ComponentWithDependency {
-        private final Object dependency;
-        
-        public ComponentWithDependency(Object dependency) {
-            this.dependency = dependency;
-        }
-        
-        public Object getDependency() { return dependency; }
-    }
-    
-    public static class ComponentWithMethods {
-        private String configValue;
-        private int multiplier;
-        
-        public void configure(String value) {
-            this.configValue = value;
-        }
-        
-        public void setMultiplier(int multiplier) {
-            this.multiplier = multiplier;
-        }
-        
-        public String getConfigValue() { return configValue; }
-        public int getMultiplier() { return multiplier; }
-    }
-    
-    public static class ComponentWithBoolean {
-        private boolean enabled;
-        
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
-        
-        public boolean isEnabled() { return enabled; }
+        assertNotNull(retrieved);
+        assertEquals(1, retrieved.size());
+        assertEquals("field2", retrieved.get(0));
     }
 }
+package com.trading.streaming.impl;
+
+import com.trading.streaming.api.Fields;
+import com.trading.streaming.api.OutputFieldsDeclarer;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Implementation of OutputFieldsDeclarer that stores stream field declarations.
+ */
+public class OutputFieldsDeclarerImpl implements OutputFieldsDeclarer {
+    
+    private final Map<String, Fields> streams = new ConcurrentHashMap<>();
+    private final Map<String, Boolean> directStreams = new ConcurrentHashMap<>();
+    
+    @Override
+    public void declare(Fields fields) {
+        declareStream("default", false, fields);
+    }
+    
+    @Override
+    public void declareStream(String streamId, Fields fields) {
+        declareStream(streamId, false, fields);
+    }
+    
+    @Override
+    public void declareStream(String streamId, boolean direct, Fields fields) {
+        streams.put(streamId, fields);
+        directStreams.put(streamId, direct);
+    }
+    
+    /**
+     * Get fields for a specific stream.
+     * Falls back to "default" stream if the requested stream doesn't exist.
+     * Returns null if neither the requested stream nor default exists.
+     */
+    public Fields getFieldsFor(String streamId) {
+        // Handle null as default
+        if (streamId == null) {
+            streamId = "default";
+        }
+        
+        // Try to get specific stream
+        Fields fields = streams.get(streamId);
+        
+        // If not found and not asking for default, try fallback to default
+        if (fields == null && !"default".equals(streamId)) {
+            fields = streams.get("default");
+        }
+        
+        return fields;
+    }
+    
+    /**
+     * Check if a stream is declared as direct.
+     */
+    public boolean isDirect(String streamId) {
+        return directStreams.getOrDefault(streamId, false);
+    }
+    
+    /**
+     * Get all declared streams.
+     */
+    public Map<String, Fields> getAllStreams() {
+        return new HashMap<>(streams);
+    }
+}
+
 ```
 
 <span style="display:none">[^1]</span>
